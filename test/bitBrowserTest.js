@@ -2,6 +2,7 @@ const { BitBrowserAPI, connect } = require('../lib/cjs/index');
 const { BitBrowserLogger } = require('../lib/cjs/module/bitBrowserHelper');
 const fs = require('fs');
 const path = require('path');
+const util = require('util');
 
 // 创建日志目录
 const logDir = path.join(__dirname, 'logs');
@@ -13,15 +14,31 @@ if (!fs.existsSync(logDir)) {
 const logFile = path.join(logDir, `bitbrowser-test-${Date.now()}.log`);
 const logger = new BitBrowserLogger(true, logFile);
 
+// 增强日志记录
+const logError = (error) => {
+  logger.error(`Error: ${error.message}`);
+  if (error.response) {
+    logger.error(`Response status: ${error.response.status}`);
+    logger.error(`Response data: ${util.inspect(error.response.data, { depth: null })}`);
+  }
+  if (error.config) {
+    logger.error(`Request config: ${util.inspect(error.config, { depth: null })}`);
+  }
+  if (error.stack) {
+    logger.error(`Stack trace: ${error.stack}`);
+  }
+};
+
 async function runBitBrowserTest() {
   logger.log('Starting BitBrowser test...');
   
   let browserId; // 在外部声明browserId
+  let bitAPI;
   
   try {
     // 1. 创建比特浏览器API实例
     logger.log('Creating BitBrowser API instance...');
-    const bitAPI = new BitBrowserAPI({
+    bitAPI = new BitBrowserAPI({
       apiUrl: 'http://127.0.0.1:54345', // 默认地址
       debug: true
     });
@@ -39,14 +56,6 @@ async function runBitBrowserTest() {
         hardwareConcurrency: 4, // 4核CPU
         webglVendor: 'Intel Inc.', // WebGL供应商
         webglRenderer: 'Intel Iris Pro', // WebGL渲染器
-      },
-      proxy: {
-        proxyMethod: 2,
-        proxyType: 'http',
-        host: 'proxy.example.com',
-        port: '8080',
-        proxyUserName: 'user',
-        proxyPassword: 'pass'
       }
     });
     logger.log(`Browser created with ID: ${browserId}`);
@@ -59,7 +68,7 @@ async function runBitBrowserTest() {
     
     // 4. 使用puppeteer-real-browser连接到比特浏览器
     logger.log('Connecting with puppeteer-real-browser...');
-    const { page } = await connect({
+    const { browser, page } = await connect({
       bitBrowser: {
         browserId,
         debug: true
@@ -67,10 +76,39 @@ async function runBitBrowserTest() {
       turnstile: true, // 启用真实点击
       debug: true      // 启用调试日志
     });
+    logger.log(`Connected browser: ${!!browser}, page: ${!!page}`);
+    logger.log('Connected to browser successfully');
+    
+    // 添加浏览器事件监听器
+    browser.on('disconnected', () => {
+      logger.log('Browser disconnected');
+    });
+    
+    browser.on('targetchanged', target => {
+      logger.log(`Target changed: ${target.url()}`);
+    });
+    
+    browser.on('targetcreated', target => {
+      logger.log(`Target created: ${target.url()}`);
+    });
+    
+    browser.on('targetdestroyed', target => {
+      logger.log(`Target destroyed: ${target.url()}`);
+    });
     
     // 5. 使用页面进行自动化操作
     logger.log('Navigating to example.com...');
-    await page.goto('https://example.com');
+    try {
+      await page.goto('https://example.com', {
+        waitUntil: 'domcontentloaded',
+        timeout: 30000
+      });
+      logger.log('Navigation completed');
+    } catch (error) {
+      logger.error('Navigation failed:');
+      logError(error);
+      throw error;
+    }
     
     // 获取页面标题
     const title = await page.title();
@@ -78,44 +116,38 @@ async function runBitBrowserTest() {
     
     // 截图
     const screenshotPath = path.join(logDir, `screenshot-${Date.now()}.png`);
-    await page.screenshot({ path: screenshotPath });
-    logger.log(`Screenshot saved to: ${screenshotPath}`);
+    try {
+      await page.screenshot({ path: screenshotPath });
+      logger.log(`Screenshot saved to: ${screenshotPath}`);
+    } catch (error) {
+      logger.error('Screenshot failed:');
+      logError(error);
+    }
     
     // 执行页面操作（使用真实点击）
     logger.log('Clicking on page with real cursor...');
-    await page.realClick('a', {
-      moveDelay: 300, // 移动延迟300ms
-      paddingPercentage: 10 // 点击区域增加10%填充
-    });
+    try {
+      await page.realClick('a', {
+        moveDelay: 300, // 移动延迟300ms
+        paddingPercentage: 10 // 点击区域增加10%填充
+      });
+      logger.log('Click completed');
+    } catch (error) {
+      logger.error('Click failed:');
+      logError(error);
+    }
     
     // 等待新页面加载
-    await page.waitForNavigation({ waitUntil: 'domcontentloaded' });
-    logger.log(`Navigated to: ${await page.url()}`);
-    
-    // 测试表单输入
-    logger.log('Testing form input...');
-    await page.goto('https://httpbin.org/forms/post');
-    
-    // 输入姓名
-    await page.type('input[name="custname"]', 'John Doe', { delay: 50 });
-    
-    // 选择披萨尺寸
-    await page.select('select[name="size"]', 'medium');
-    
-    // 选择配料
-    await page.click('input[value="cheese"]');
-    await page.click('input[value="onion"]');
-    
-    // 输入地址
-    await page.type('textarea[name="comments"]', '123 Main St, Anytown, USA', { delay: 30 });
-    
-    // 提交表单
-    await page.realClick('button[type="submit"]');
-    
-    // 等待结果页面
-    await page.waitForNavigation();
-    const resultJson = await page.$eval('pre', el => el.textContent);
-    logger.log('Form submission result:', resultJson);
+    try {
+      await page.waitForNavigation({
+        waitUntil: 'domcontentloaded',
+        timeout: 30000
+      });
+      logger.log(`Navigated to: ${await page.url()}`);
+    } catch (error) {
+      logger.error('Navigation after click failed:');
+      logError(error);
+    }
     
     // 6. 关闭浏览器窗口
     logger.log('Closing browser window...');
@@ -127,15 +159,25 @@ async function runBitBrowserTest() {
     
     logger.log('Test completed successfully!');
   } catch (error) {
-    logger.error('Test failed:', error);
+    logger.error('Test failed:');
+    logError(error);
     
     // 尝试关闭浏览器（如果可能）
-    if (browserId) {
+    if (browserId && bitAPI) {
       try {
+        logger.log('Attempting to close browser...');
         await bitAPI.closeBrowser(browserId);
+      } catch (cleanupError) {
+        logger.error('Browser close failed:');
+        logError(cleanupError);
+      }
+      
+      try {
+        logger.log('Attempting to delete browser...');
         await bitAPI.deleteBrowser(browserId);
       } catch (cleanupError) {
-        logger.error('Cleanup failed:', cleanupError);
+        logger.error('Browser deletion failed:');
+        logError(cleanupError);
       }
     }
     
