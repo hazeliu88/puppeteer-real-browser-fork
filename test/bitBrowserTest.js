@@ -29,6 +29,9 @@ const logError = (error) => {
   }
 };
 
+// 等待函数
+const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 async function runBitBrowserTest() {
   logger.log('Starting BitBrowser test...');
   
@@ -49,13 +52,11 @@ async function runBitBrowserTest() {
       name: 'puppeteer-test-browser',
       remark: 'Created for puppeteer-real-browser integration test',
       fingerprint: {
-        coreVersion: '124', // 使用Chrome 124内核
+        coreVersion: '136', // 使用Chrome 120内核
         os: 'win',          // 模拟Windows系统
         platform: 'windows',
         deviceMemory: 8,    // 8GB内存
         hardwareConcurrency: 4, // 4核CPU
-        webglVendor: 'Intel Inc.', // WebGL供应商
-        webglRenderer: 'Intel Iris Pro', // WebGL渲染器
       }
     });
     logger.log(`Browser created with ID: ${browserId}`);
@@ -63,12 +64,21 @@ async function runBitBrowserTest() {
     // 3. 打开浏览器窗口
     logger.log('Opening browser window...');
     const browserInfo = await bitAPI.openBrowser(browserId);
+    
+    if (!browserInfo) {
+      throw new Error('Browser info is undefined');
+    }
+    
     logger.log(`Browser opened at: ${browserInfo.http}`);
     logger.log(`WebSocket URL: ${browserInfo.wsUrl}`);
     
+    // 添加等待时间，确保浏览器完全初始化
+    logger.log('Waiting for browser to initialize...');
+    await wait(5000); // 5秒等待
+    
     // 4. 使用puppeteer-real-browser连接到比特浏览器
     logger.log('Connecting with puppeteer-real-browser...');
-    const { browser, page } = await connect({
+    const { browser: connectedBrowser, page } = await connect({
       bitBrowser: {
         browserId,
         debug: true
@@ -76,25 +86,16 @@ async function runBitBrowserTest() {
       turnstile: true, // 启用真实点击
       debug: true      // 启用调试日志
     });
-    logger.log(`Connected browser: ${!!browser}, page: ${!!page}`);
-    logger.log('Connected to browser successfully');
     
-    // 添加浏览器事件监听器
-    browser.on('disconnected', () => {
-      logger.log('Browser disconnected');
-    });
+    if (!page) {
+      throw new Error('Page is undefined after connect');
+    }
     
-    browser.on('targetchanged', target => {
-      logger.log(`Target changed: ${target.url()}`);
-    });
+    logger.log(`Connected browser: ${!!connectedBrowser}, page: ${!!page}`);
     
-    browser.on('targetcreated', target => {
-      logger.log(`Target created: ${target.url()}`);
-    });
-    
-    browser.on('targetdestroyed', target => {
-      logger.log(`Target destroyed: ${target.url()}`);
-    });
+    // 添加等待时间，确保页面加载
+    logger.log('Waiting for page to be ready...');
+    await wait(3000);
     
     // 5. 使用页面进行自动化操作
     logger.log('Navigating to example.com...');
@@ -127,8 +128,10 @@ async function runBitBrowserTest() {
     // 执行页面操作（使用真实点击）
     logger.log('Clicking on page with real cursor...');
     try {
+      // 等待链接出现
+      await page.waitForSelector('a', { timeout: 10000 });
       await page.realClick('a', {
-        moveDelay: 300, // 移动延迟300ms
+        moveDelay: 500, // 增加移动延迟
         paddingPercentage: 10 // 点击区域增加10%填充
       });
       logger.log('Click completed');
