@@ -116,14 +116,15 @@ async function runBitBrowserTest() {
     logger.log(`Page title: ${title}`);
     
     // 截图
-    const screenshotPath = path.join(logDir, `screenshot-${Date.now()}.png`);
-    try {
-      await page.screenshot({ path: screenshotPath });
-      logger.log(`Screenshot saved to: ${screenshotPath}`);
-    } catch (error) {
-      logger.error('Screenshot failed:');
-      logError(error);
-    }
+    // const screenshotPath = path.join(logDir, `screenshot-${Date.now()}.png`);
+    // try {
+    //   await page.screenshot({ path: screenshotPath });
+    //   logger.log(`Screenshot saved to: ${screenshotPath}`);
+    // } catch (error) {
+    //   logger.error('Screenshot failed:');
+    //   logError(error);
+
+    // }
     
     // 执行页面操作（使用真实点击）
     logger.log('Clicking on page with real cursor...');
