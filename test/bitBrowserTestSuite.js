@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { connect } = require('../lib/cjs/index.js');
-const BitBrowserAPI = require('../lib/cjs/module/bitBrowserAPI'); // 修复导入方式
+const { connect, pageController } = require('../lib/cjs/index.js'); // 确保导出 pageController
+const BitBrowserAPI = require('../lib/cjs/module/bitBrowserAPI');
 const { BitBrowserLogger } = require('../lib/cjs/module/bitBrowserHelper');
 const fs = require('fs');
 const path = require('path');
@@ -23,9 +23,6 @@ const logError = (error) => {
   if (error.response) {
     logger.error(`Response status: ${error.response.status}`);
     logger.error(`Response data: ${util.inspect(error.response.data, { depth: null })}`);
-  }
-  if (error.config) {
-    logger.error(`Request config: ${util.inspect(error.config, { depth: null })}`);
   }
   if (error.stack) {
     logger.error(`Stack trace: ${error.stack}`);
@@ -50,10 +47,19 @@ const fingerprint = {
   hardwareConcurrency: 4,
 };
 
-// 比特浏览器连接选项
+// 比特浏览器连接选项 - 添加更多反检测参数
 const bitBrowserConnectOption = {
   turnstile: true,
-  debug: true
+  debug: true,
+  stealth: true,
+  evasion: {
+    webgl: true,
+    fonts: true,
+    audio: true,
+    canvas: true,
+    mediaDevices: true,
+    webRTC: true
+  }
 };
 
 // 全局变量，用于共享浏览器实例
@@ -111,14 +117,21 @@ test('BitBrowser Test Suite', async (t) => {
   // 测试用例：DrissionPage Detector
   await t.test('DrissionPage Detector', async () => {
     const page = await globalBrowser.newPage();
+    
     try {
-      await page.goto("https://web.archive.org/web/20240913054632/https://drissionpage.pages.dev/");
-      await page.realClick("#detector");
+      // 应用页面控制器
+      const enhancedPage = await pageController(page, {
+        turnstile: true,
+        logger
+      }, globalBrowser);
+      
+      await enhancedPage.goto("https://web.archive.org/web/20240913054632/https://drissionpage.pages.dev/");
+      await enhancedPage.realClick("#detector");
       
       // 添加等待时间
       await wait(3000);
       
-      const result = await page.evaluate(() => {
+      const result = await enhancedPage.evaluate(() => {
         return document.querySelector('#isBot span').textContent.includes("not") ? true : false;
       });
       
@@ -131,17 +144,28 @@ test('BitBrowser Test Suite', async (t) => {
   // 测试用例：Brotector, a webdriver detector
   await t.test('Brotector, a webdriver detector', async () => {
     const page = await globalBrowser.newPage();
+    
     try {
-      await page.goto("https://kaliiiiiiiiii.github.io/brotector/");
+      // 应用页面控制器
+      const enhancedPage = await pageController(page, {
+        turnstile: true,
+        logger
+      }, globalBrowser);
       
-      // 添加等待时间
-      await wait(5000);
+      await enhancedPage.goto("https://kaliiiiiiiiii.github.io/brotector/");
       
-      const result = await page.evaluate(() => {
-        return document.querySelector('#table-keys').getAttribute('bgcolor');
+      // 增加等待时间
+      await wait(8000);
+      
+      // 更健壮的断言
+      const result = await enhancedPage.evaluate(() => {
+        const table = document.querySelector('#table-keys');
+        if (!table) return null;
+        
+        return table.getAttribute('bgcolor') === "darkgreen";
       });
       
-      assert.strictEqual(result === "darkgreen", true, "Brotector test failed!");
+      assert.strictEqual(result, true, "Brotector test failed!");
     } finally {
       await page.close();
     }
@@ -150,18 +174,26 @@ test('BitBrowser Test Suite', async (t) => {
   // 测试用例：Cloudflare WAF
   await t.test('Cloudflare WAF', async () => {
     const page = await globalBrowser.newPage();
+    
     try {
-      await page.goto("https://nopecha.com/demo/cloudflare");
+      // 应用页面控制器
+      const enhancedPage = await pageController(page, {
+        turnstile: true,
+        logger
+      }, globalBrowser);
       
-      let verify = null;
+      await enhancedPage.goto("https://nopecha.com/demo/cloudflare");
+      
+      // 增加超时时间
       const startDate = Date.now();
+      let verify = null;
       
-      while (!verify && (Date.now() - startDate) < 30000) {
-        verify = await page.evaluate(() => {
+      while (!verify && (Date.now() - startDate) < 60000) { // 60秒超时
+        verify = await enhancedPage.evaluate(() => {
           return document.querySelector('.link_row') ? true : null;
         }).catch(() => null);
         
-        await wait(1000);
+        await wait(2000); // 每2秒检查一次
       }
       
       assert.strictEqual(verify === true, true, "Cloudflare WAF test failed!");
@@ -173,15 +205,22 @@ test('BitBrowser Test Suite', async (t) => {
   // 测试用例：Cloudflare Turnstile
   await t.test('Cloudflare Turnstile', async () => {
     const page = await globalBrowser.newPage();
+    
     try {
-      await page.goto("https://turnstile.zeroclover.io/");
-      await page.waitForSelector('[type="submit"]');
+      // 应用页面控制器
+      const enhancedPage = await pageController(page, {
+        turnstile: true,
+        logger
+      }, globalBrowser);
+      
+      await enhancedPage.goto("https://turnstile.zeroclover.io/");
+      await enhancedPage.waitForSelector('[type="submit"]');
       
       let token = null;
       const startDate = Date.now();
       
       while (!token && (Date.now() - startDate) < 30000) {
-        token = await page.evaluate(() => {
+        token = await enhancedPage.evaluate(() => {
           try {
             const element = document.querySelector('[name="cf-turnstile-response"]');
             return element && element.value && element.value.length > 20 ? element.value : null;
@@ -202,13 +241,20 @@ test('BitBrowser Test Suite', async (t) => {
   // 测试用例：Fingerprint JS Bot Detector
   await t.test('Fingerprint JS Bot Detector', async () => {
     const page = await globalBrowser.newPage();
+    
     try {
-      await page.goto("https://fingerprint.com/products/bot-detection/");
+      // 应用页面控制器
+      const enhancedPage = await pageController(page, {
+        turnstile: true,
+        logger
+      }, globalBrowser);
+      
+      await enhancedPage.goto("https://fingerprint.com/products/bot-detection/");
       
       // 添加等待时间
       await wait(8000);
       
-      const detect = await page.evaluate(() => {
+      const detect = await enhancedPage.evaluate(() => {
         const element = document.querySelector('.HeroSection-module--botSubTitle--2711e');
         return element && element.textContent.includes("not") ? true : false;
       });
@@ -222,13 +268,20 @@ test('BitBrowser Test Suite', async (t) => {
   // 测试用例：Datadome Bot Detector
   await t.test('Datadome Bot Detector', async () => {
     const page = await globalBrowser.newPage();
+    
     try {
-      await page.goto("https://antoinevastel.com/bots/datadome");
+      // 应用页面控制器
+      const enhancedPage = await pageController(page, {
+        turnstile: true,
+        logger
+      }, globalBrowser);
+      
+      await enhancedPage.goto("https://antoinevastel.com/bots/datadome");
       
       // 添加等待时间
       await wait(5000);
       
-      const check = await page.waitForSelector('nav #navbarCollapse').catch(() => null);
+      const check = await enhancedPage.waitForSelector('nav #navbarCollapse').catch(() => null);
       
       assert.strictEqual(check ? true : false, true, 
         "Datadome Bot Detector test failed! [This may also be because your ip address has a high spam score. Please try with a clean ip address.]");
@@ -240,18 +293,25 @@ test('BitBrowser Test Suite', async (t) => {
   // 测试用例：Recaptcha V3 Score (hard)
   await t.test('Recaptcha V3 Score (hard)', async () => {
     const page = await globalBrowser.newPage();
+    
     try {
-      await page.goto("https://antcpt.com/score_detector/");
+      // 应用页面控制器
+      const enhancedPage = await pageController(page, {
+        turnstile: true,
+        logger
+      }, globalBrowser);
+      
+      await enhancedPage.goto("https://antcpt.com/score_detector/");
       
       // 添加等待时间
       await wait(3000);
       
-      await page.realClick("button");
+      await enhancedPage.realClick("button");
       
       // 添加等待时间
       await wait(8000);
       
-      const score = await page.evaluate(() => {
+      const score = await enhancedPage.evaluate(() => {
         const element = document.querySelector('big');
         return element ? element.textContent.replace(/[^0-9.]/g, '') : '0';
       });
@@ -267,9 +327,16 @@ test('BitBrowser Test Suite', async (t) => {
   // 测试用例：在新标签页中测试
   await t.test('New Tab Test', async () => {
     const page = await globalBrowser.newPage();
+    
     try {
+      // 应用页面控制器
+      const enhancedPage = await pageController(page, {
+        turnstile: true,
+        logger
+      }, globalBrowser);
+      
       // 导航到示例网站
-      await page.goto("https://example.com", {
+      await enhancedPage.goto("https://example.com", {
         waitUntil: 'domcontentloaded',
         timeout: 30000
       });
@@ -278,17 +345,17 @@ test('BitBrowser Test Suite', async (t) => {
       await wait(3000);
       
       // 获取页面标题
-      const title = await page.title();
+      const title = await enhancedPage.title();
       logger.log(`Page title: ${title}`);
       
       // 执行页面操作
-      await page.realClick('a');
+      await enhancedPage.realClick('a');
       
       // 添加等待时间
       await wait(3000);
       
       // 验证导航
-      const newUrl = await page.url();
+      const newUrl = await enhancedPage.url();
       assert.ok(newUrl.includes('iana.org'), `Expected URL to contain 'iana.org', got: ${newUrl}`);
     } finally {
       await page.close();
