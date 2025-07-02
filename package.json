@@ -1,7 +1,7 @@
 {
-  "name": "puppeteer-real-browser",
-  "version": "1.4.2",
-  "description": "This package is designed to bypass puppeteer's bot-detecting captchas such as Cloudflare. It acts like a real browser and can be managed with puppeteer.",
+  "name": "puppeteer-real-browser-bit",
+  "version": "1.0.0",
+  "description": "A library for using Puppeteer-real-browser with BitBrowser fingerprint browser.",
   "main": "lib/cjs/index.js",
   "module": "lib/esm/index.mjs",
   "exports": {
@@ -13,31 +13,19 @@
   },
   "typings": "typings.d.ts",
   "scripts": {
-    "esm_test": "node ./test/esm/test.js",
-    "cjs_test": "node ./test/cjs/test.js",
-    "test": "node test/index.js"
+    "test": "node examples/new-tab.js"
   },
   "keywords": [
-    "cf-bypass",
-    "cloudflare-bypass",
-    "puppeteer-fingerprint",
-    "puppeteer-cloudflare",
-    "puppeteer-real-browser",
-    "undetectable-puppeteer",
-    "undetect",
-    "undetectable",
-    "puppeteer-undetectable",
-    "puppeteer-undetect",
-    "puppeteer-undetectable-bypass",
-    "puppeteer-undetect-bypass",
-    "puppeteer-undetectable-cloudflare",
-    "puppeteer-undetect-cloudflare",
-    "puppeteer-undetectable-cf",
-    "puppeteer-undetect-cf",
-    "puppeteer-undetectable-cf-bypass"
+    "puppeteer",
+    "bitbrowser",
+    "fingerprint",
+    "automation",
+    "browser",
+    "stealth",
+    "web scraping"
   ],
-  "author": "zfc-software",
-  "license": "ISC",
+  "author": "hazeliu",
+  "license": "MIT",
   "dependencies": {
     "axios": "^1.10.0",
     "chrome-launcher": "^1.1.2",
